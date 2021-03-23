@@ -20,7 +20,7 @@ func main() {
 	var cfg *config.Configuration
 	var err error
 	if cfg, err = config.LoadConfiguration("domestia.json"); err != nil {
-		log.Printf("Error loading configuration: %v\n", err)
+		log.Printf("Error loading configuration: %v", err)
 		return
 	}
 
@@ -54,11 +54,12 @@ func main() {
 
 		// Subscribe to all light command topics
 		cmdTopic := l.CommandTopic()
+		relay := l.Relay
 
 		log.Printf("MQTT subscribing to %v", cmdTopic)
 
 		if t := mqttClient.Subscribe(cmdTopic, 0, func(client mqtt.Client, msg mqtt.Message) {
-			log.Printf("Received: %v", string(msg.Payload()))
+			log.Printf("[%v] Received: %v", cmdTopic, string(msg.Payload()))
 
 			cmd := &LightCommand{}
 			if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
@@ -67,20 +68,21 @@ func main() {
 			}
 
 			if cmd.State == "ON" {
-				domestiaClient.TurnOn(l.Relay)
+				domestiaClient.TurnOn(relay)
 
 				// If the command is "on", brightness will never be 0. Therefore if it is 0 here, that means it was absent in the payload
 				if cmd.Brightness != 0 {
-					domestiaClient.SetBrightness(l.Relay, cmd.Brightness)
+					domestiaClient.SetBrightness(relay, cmd.Brightness)
 				}
 			} else {
-				domestiaClient.TurnOff(l.Relay)
+				domestiaClient.TurnOff(relay)
 			}
 		}); t.Wait() && t.Error() != nil {
 			log.Printf("MQTT receive error: %v", t.Error())
 		}
 	}
 
+	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness := make(map[int]int)
 
 	for {
@@ -105,17 +107,18 @@ func main() {
 				}
 
 				if shouldPublishUpdate {
+					stateTopic := configuration.StateTopic()
 					if stateJson, err := light.StateJson(); err != nil {
-						log.Printf("Error marshalling light state: %v", err)
-					} else if t := mqttClient.Publish(configuration.StateTopic(), 0, true, stateJson); t.Wait() && t.Error() != nil {
-						log.Printf("MQTT publish error: %v", t.Error())
+						log.Printf("[%v] Error marshalling light state: %v", stateTopic, err)
+					} else if t := mqttClient.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
+						log.Printf("[%v] Publish error: %v", stateTopic, t.Error())
 					} else {
-						log.Printf("MQTT published to %v", configuration.StateTopic())
+						log.Printf("[%v] Published", stateTopic)
 					}
 				}
 			}
 		}
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(time.Duration(cfg.RefreshFrequency * 1_000_000))
 	}
 }

@@ -9,9 +9,10 @@ import (
 const TOPIC_PREFIX = "homeassistant"
 
 type Configuration struct {
-	Lights    []LightConfiguration `json:"lights"`
-	Mqtt      Mqtt                 `json:"mqtt"`
-	IpAddress string               `json:"ip_address"`
+	Lights           []LightConfiguration `json:"lights"`
+	Mqtt             Mqtt                 `json:"mqtt"`
+	IpAddress        string               `json:"ip_address"`
+	RefreshFrequency int                  `json:"refresh_frequency"`
 }
 
 type Mqtt struct {
@@ -29,7 +30,9 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 
 	defer file.Close()
 	decoder := json.NewDecoder(file)
-	configuration := &Configuration{}
+	configuration := &Configuration{
+		RefreshFrequency: 2000,
+	}
 	if err := decoder.Decode(configuration); err != nil {
 		return nil, err
 	}
