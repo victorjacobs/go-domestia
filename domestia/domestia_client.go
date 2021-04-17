@@ -65,6 +65,11 @@ func (d *DomestiaClient) GetState() ([]Light, error) {
 	}
 
 	lights := make([]Light, 0)
+
+	if response[0] != 0xff {
+		return lights, nil
+	}
+
 	for i, byte := range response[3:] {
 		if cfg, ok := d.lightConfiguration[i+1]; ok {
 			lights = append(lights, NewLight(cfg, byte))

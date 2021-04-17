@@ -1,0 +1,20 @@
+{
+  "ip_address": "192.168.1.2",
+  "mqtt": {
+    "ip_address": "192.168.1.1",
+    "username": "username",
+    "password": "password"
+  },
+  "lights": [
+    {
+      "name": "Wardrobe",
+      "relay": 1,
+      "always_on": true,
+      "hidden_in_home_assistant": true
+    },
+    {
+      "name": "Garden",
+      "relay": 2
+    }
+  ]
+}
