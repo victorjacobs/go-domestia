@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-const TOPIC_PREFIX = "homeassistant"
+const TOPIC_PREFIX = "domestia"
 
 type Configuration struct {
 	Lights           []LightConfiguration `json:"lights"`

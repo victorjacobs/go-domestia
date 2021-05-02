@@ -15,7 +15,7 @@ type LightConfiguration struct {
 }
 
 func (l *LightConfiguration) EntityId() string {
-	return fmt.Sprintf("d_%v", strings.Replace(strings.ToLower(l.Name), " ", "_", -1))
+	return strings.Replace(strings.ToLower(l.Name), " ", "_", -1)
 }
 
 func (l *LightConfiguration) UniqueId() string {
@@ -31,7 +31,7 @@ func (l *LightConfiguration) StateTopic() string {
 }
 
 func (l *LightConfiguration) ConfigTopic() string {
-	return fmt.Sprintf("%v/light/%v/config", TOPIC_PREFIX, l.EntityId())
+	return fmt.Sprintf("homeassistant/light/%v/config", l.EntityId())
 }
 
 type LightConfigJson struct {
