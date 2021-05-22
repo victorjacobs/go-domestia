@@ -3,7 +3,6 @@ package domestia
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -92,9 +91,13 @@ func (d *DomestiaClient) toggleRelay(cmd byte, relay int) error {
 		0xff, 0x00, 0x00, 0x02, cmd, byte(relay), cmd + byte(relay),
 	}
 
-	_, err := d.send(command)
+	if response, err := d.send(command); err != nil {
+		return err
+	} else if string(response) != "OK" {
+		return fmt.Errorf("unexpected command response. Expected OK, received %v", string(response))
+	}
 
-	return err
+	return nil
 }
 
 func (d *DomestiaClient) SetBrightness(relay int, brightness int) error {
@@ -104,9 +107,13 @@ func (d *DomestiaClient) SetBrightness(relay int, brightness int) error {
 		0xff, 0x00, 0x00, 0x03, 0x10, byte(relay), byte(brightnessForController), byte(0x10 + relay + brightnessForController),
 	}
 
-	_, err := d.send(command)
+	if response, err := d.send(command); err != nil {
+		return err
+	} else if string(response) != "OK" {
+		return fmt.Errorf("unexpected command response. Expected OK, received %v", string(response))
+	}
 
-	return err
+	return nil
 }
 
 func (d *DomestiaClient) send(command []byte) ([]byte, error) {
@@ -118,20 +125,12 @@ func (d *DomestiaClient) send(command []byte) ([]byte, error) {
 
 	response := make([]byte, 256)
 
-	log.Printf("Sending %v\n", command)
-
-	var err error
-	var n int
-	if _, err = d.conn.Write(command); err != nil {
+	if _, err := d.conn.Write(command); err != nil {
 		return nil, err
-	} else if n, err = d.conn.Read(response); err != nil {
+	} else if n, err := d.conn.Read(response); err != nil {
 		return nil, err
-	}
-
-	if response[0] != 0xff {
-		log.Printf("Received %v\n", string(response))
-	} else {
-		log.Printf("Received %v bytes", n)
+	} else if n == 0 {
+		return nil, errors.New("read 0 bytes")
 	}
 
 	return response, nil

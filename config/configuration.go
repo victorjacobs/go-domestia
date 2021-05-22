@@ -3,7 +3,10 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 const TOPIC_PREFIX = "domestia"
@@ -43,4 +46,8 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 	}
 
 	return configuration, nil
+}
+
+func (m *Mqtt) ClientOptions() *mqtt.ClientOptions {
+	return mqtt.NewClientOptions().AddBroker(fmt.Sprintf("tcp://%v:1883", m.IpAddress)).SetUsername(m.Username).SetPassword(m.Password)
 }
