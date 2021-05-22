@@ -16,6 +16,8 @@ type LightCommand struct {
 	Brightness int    `json:"brightness"`
 }
 
+// TODO mark everything as unavailable on shutdown
+
 func main() {
 	var cfg *config.Configuration
 	var err error
@@ -85,7 +87,7 @@ func main() {
 	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness := make(map[int]int)
 
-	for {
+	go loopSafely(func() {
 		if lights, err := domestiaClient.GetState(); err != nil {
 			log.Printf("Error: %v", err)
 		} else {
@@ -120,5 +122,20 @@ func main() {
 		}
 
 		time.Sleep(time.Duration(cfg.RefreshFrequency * 1_000_000))
+	})
+
+	select {}
+}
+
+func loopSafely(f func()) {
+	defer func() {
+		if v := recover(); v != nil {
+			log.Printf("Panic: %v, restarting", v)
+			go loopSafely(f)
+		}
+	}()
+
+	for {
+		f()
 	}
 }
