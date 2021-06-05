@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -49,5 +50,15 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 }
 
 func (m *Mqtt) ClientOptions() *mqtt.ClientOptions {
-	return mqtt.NewClientOptions().AddBroker(fmt.Sprintf("tcp://%v:1883", m.IpAddress)).SetUsername(m.Username).SetPassword(m.Password)
+	return mqtt.NewClientOptions().
+		AddBroker(fmt.Sprintf("tcp://%v:1883", m.IpAddress)).
+		SetUsername(m.Username).
+		SetPassword(m.Password).
+		SetAutoReconnect(true).
+		SetConnectionLostHandler(func(client mqtt.Client, err error) {
+			log.Printf("MQTT connection lost: %v", err)
+		}).
+		SetReconnectingHandler(func(client mqtt.Client, opts *mqtt.ClientOptions) {
+			log.Printf("MQTT reconnecting")
+		})
 }

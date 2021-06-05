@@ -12,14 +12,14 @@ import (
 
 const PORT = 52001
 
-type DomestiaClient struct {
-	mutex              sync.Mutex
+type Client struct {
+	mutex              *sync.Mutex
 	ipAddress          string
 	conn               net.Conn
 	lightConfiguration map[int]config.LightConfiguration
 }
 
-func NewDomestiaClient(ipAddress string, lights []config.LightConfiguration) (*DomestiaClient, error) {
+func NewClient(ipAddress string, lights []config.LightConfiguration) (*Client, error) {
 	if ipAddress == "" {
 		return nil, errors.New("NewDomestiaClient requires ipAddress")
 	}
@@ -30,13 +30,14 @@ func NewDomestiaClient(ipAddress string, lights []config.LightConfiguration) (*D
 		lightConfiguration[light.Relay] = light
 	}
 
-	return &DomestiaClient{
+	return &Client{
+		mutex:              new(sync.Mutex),
 		ipAddress:          ipAddress,
 		lightConfiguration: lightConfiguration,
 	}, nil
 }
 
-func (d *DomestiaClient) connect() error {
+func (d *Client) connect() error {
 	if conn, err := net.Dial("tcp", d.connectUrl()); err != nil {
 		return err
 	} else if err = conn.SetDeadline(time.Now().Add(time.Second)); err != nil {
@@ -48,11 +49,11 @@ func (d *DomestiaClient) connect() error {
 	}
 }
 
-func (d *DomestiaClient) connectUrl() string {
+func (d *Client) connectUrl() string {
 	return fmt.Sprintf("%v:%v", d.ipAddress, PORT)
 }
 
-func (d *DomestiaClient) GetState() ([]Light, error) {
+func (d *Client) GetState() ([]Light, error) {
 	stateCommand := []byte{
 		0xff, 0x00, 0x00, 0x01, 0x3c, 0x3c, 0x20,
 	}
@@ -78,15 +79,15 @@ func (d *DomestiaClient) GetState() ([]Light, error) {
 	return lights, nil
 }
 
-func (d *DomestiaClient) TurnOff(relay int) error {
+func (d *Client) TurnOff(relay int) error {
 	return d.toggleRelay(0x0f, relay)
 }
 
-func (d *DomestiaClient) TurnOn(relay int) error {
+func (d *Client) TurnOn(relay int) error {
 	return d.toggleRelay(0x0e, relay)
 }
 
-func (d *DomestiaClient) toggleRelay(cmd byte, relay int) error {
+func (d *Client) toggleRelay(cmd byte, relay int) error {
 	command := []byte{
 		0xff, 0x00, 0x00, 0x02, cmd, byte(relay), cmd + byte(relay),
 	}
@@ -100,7 +101,7 @@ func (d *DomestiaClient) toggleRelay(cmd byte, relay int) error {
 	return nil
 }
 
-func (d *DomestiaClient) SetBrightness(relay int, brightness int) error {
+func (d *Client) SetBrightness(relay int, brightness int) error {
 	brightnessForController := int(float64(brightness) * (63.0 / 255.0))
 
 	command := []byte{
@@ -116,11 +117,13 @@ func (d *DomestiaClient) SetBrightness(relay int, brightness int) error {
 	return nil
 }
 
-func (d *DomestiaClient) send(command []byte) ([]byte, error) {
+func (d *Client) send(command []byte) ([]byte, error) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
-	d.connect()
+	if err := d.connect(); err != nil {
+		return nil, err
+	}
 	defer d.conn.Close()
 
 	response := make([]byte, 256)
