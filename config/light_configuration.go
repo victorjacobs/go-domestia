@@ -23,11 +23,11 @@ func (l *LightConfiguration) UniqueId() string {
 }
 
 func (l *LightConfiguration) CommandTopic() string {
-	return fmt.Sprintf("%v/light/%v/set", TOPIC_PREFIX, l.EntityId())
+	return fmt.Sprintf("%v/light/%v/set", topicPrefix, l.EntityId())
 }
 
 func (l *LightConfiguration) StateTopic() string {
-	return fmt.Sprintf("%v/light/%v/state", TOPIC_PREFIX, l.EntityId())
+	return fmt.Sprintf("%v/light/%v/state", topicPrefix, l.EntityId())
 }
 
 func (l *LightConfiguration) ConfigTopic() string {

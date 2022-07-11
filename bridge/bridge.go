@@ -65,8 +65,9 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 				log.Printf("Turning on %v", light.Name)
 				b.domestia.TurnOn(relay)
 
-				// If the command is "on", brightness will never be 0. Therefore if it is 0 here, that means it was missing in the payload
-				if cmd.Brightness != 0 {
+				if !light.Dimmable {
+					b.domestia.SetBrightness(relay, 100)
+				} else if cmd.Brightness != 0 {
 					b.domestia.SetBrightness(relay, cmd.Brightness)
 				}
 			} else {
@@ -81,7 +82,8 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 	return nil
 }
 
-// Fetches current state of the controller and publishes updates to mqtt
+// Fetches current state of the controller and publishes updates to mqtt.
+// Also makes sure always-on lights are in fact always on.
 func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 	lights, err := b.domestia.GetState()
 
@@ -99,8 +101,8 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 			shouldPublishUpdate = light.Brightness != brightness
 		}
 
-		if light.Brightness == 0 && configuration.AlwaysOn {
-			b.domestia.TurnOn(configuration.Relay)
+		if light.Brightness != 100 && configuration.AlwaysOn {
+			b.domestia.SetBrightness(configuration.Relay, 100)
 			shouldPublishUpdate = false
 		} else {
 			b.relayToBrightness[configuration.Relay] = light.Brightness
