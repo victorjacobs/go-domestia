@@ -12,9 +12,15 @@ type Light struct {
 }
 
 func NewLight(cfg config.LightConfiguration, brightness byte) Light {
+	brightnessFloat := float64(brightness)
+	// If brightness is exactly 1, the relay is not dimmable and on.
+	if brightnessFloat == 1.0 {
+		brightnessFloat = 63
+	}
+
 	return Light{
 		Configuration: cfg,
-		Brightness:    int(float64(brightness) * (255.0 / 63.0)), // The controller returns brightness [0..63] so convert it to [0..255]
+		Brightness:    int(brightnessFloat * (255.0 / 63.0)), // The controller returns brightness [0..63] so convert it to [0..255]
 	}
 }
 

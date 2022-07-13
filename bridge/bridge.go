@@ -66,7 +66,7 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 				b.domestia.TurnOn(relay)
 
 				if !light.Dimmable {
-					b.domestia.SetBrightness(relay, 100)
+					b.domestia.SetBrightness(relay, 255)
 				} else if cmd.Brightness != 0 {
 					b.domestia.SetBrightness(relay, cmd.Brightness)
 				}
@@ -83,7 +83,8 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 }
 
 // Fetches current state of the controller and publishes updates to mqtt.
-// Also makes sure always-on lights are in fact always on.
+// Also makes sure always-on lights are in fact always on. Also makes sure
+// that non-dimmable lights are not dimmed.
 func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 	lights, err := b.domestia.GetState()
 
@@ -101,8 +102,15 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 			shouldPublishUpdate = light.Brightness != brightness
 		}
 
-		if light.Brightness != 100 && configuration.AlwaysOn {
-			b.domestia.SetBrightness(configuration.Relay, 100)
+		if configuration.AlwaysOn && light.Brightness != 255 {
+			// If the light is always-on, and the brightness is not 100%, set it to 100%
+			b.domestia.SetBrightness(configuration.Relay, 255)
+			shouldPublishUpdate = false
+		} else if !configuration.Dimmable && light.Brightness != 0 && light.Brightness != 255 {
+			// If the light is not dimmable and on it should always be set to 100%
+			log.Printf("Non-dimmable light %v at brightness %v, resetting", configuration.Name, light.Brightness)
+
+			b.domestia.SetBrightness(configuration.Relay, 255)
 			shouldPublishUpdate = false
 		} else {
 			b.relayToBrightness[configuration.Relay] = light.Brightness
