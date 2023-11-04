@@ -10,7 +10,7 @@ import (
 	"github.com/victorjacobs/go-domestia/config"
 )
 
-const PORT = 52001
+const port = 52001
 
 type Client struct {
 	mutex              *sync.Mutex
@@ -50,7 +50,7 @@ func (d *Client) connect() error {
 }
 
 func (d *Client) connectUrl() string {
-	return fmt.Sprintf("%v:%v", d.ipAddress, PORT)
+	return fmt.Sprintf("%v:%v", d.ipAddress, port)
 }
 
 func (d *Client) GetState() ([]Light, error) {
@@ -102,7 +102,7 @@ func (d *Client) toggleRelay(cmd byte, relay int) error {
 }
 
 func (d *Client) SetBrightness(relay int, brightness int) error {
-	brightnessForController := int(float64(brightness) * (63.0 / 255.0))
+	brightnessForController := int(float64(brightness) * (64.0 / 255.0))
 
 	command := []byte{
 		0xff, 0x00, 0x00, 0x03, 0x10, byte(relay), byte(brightnessForController), byte(0x10 + relay + brightnessForController),

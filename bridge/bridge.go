@@ -104,7 +104,10 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 
 		if configuration.AlwaysOn && light.Brightness != 255 {
 			// If the light is always-on, and the brightness is not 100%, set it to 100%
+			log.Printf("Turning always-on light %v back on", light.Configuration.Name)
+			b.domestia.TurnOn(configuration.Relay)
 			b.domestia.SetBrightness(configuration.Relay, 255)
+
 			shouldPublishUpdate = false
 		} else if !configuration.Dimmable && light.Brightness != 0 && light.Brightness != 255 {
 			// If the light is not dimmable and on it should always be set to 100%
