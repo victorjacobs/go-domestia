@@ -3,7 +3,8 @@ package bridge
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/victorjacobs/go-domestia/config"

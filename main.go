@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/victorjacobs/go-domestia/bridge"
