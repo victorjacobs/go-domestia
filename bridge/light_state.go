@@ -6,14 +6,14 @@ import (
 	"github.com/victorjacobs/go-domestia/domestia"
 )
 
-type lightJSON struct {
+// lightState represents the light state as published over MQTT
+type lightState struct {
 	State      string `json:"state"`
 	Brightness int    `json:"brightness"`
 }
 
-// TODO potentially change everything to be pointers? tbd
 func marshalLightToJSON(l domestia.Light) (string, error) {
-	state := &lightJSON{
+	state := &lightState{
 		Brightness: brightnessFromDomestia(l.Brightness),
 	}
 
@@ -28,4 +28,9 @@ func marshalLightToJSON(l domestia.Light) (string, error) {
 	} else {
 		return string(stateMarshalled), nil
 	}
+}
+
+// brightnessFromDomestia converts the brightness in domestia.Light to brightness as published over MQTT
+func brightnessFromDomestia(brightness uint8) int {
+	return int(float32(brightness) * (255.0 / 63.0))
 }

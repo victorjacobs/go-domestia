@@ -18,11 +18,6 @@ type Bridge struct {
 	relayToBrightness map[uint8]uint8
 }
 
-type lightCommand struct {
-	State      string `json:"state"`
-	Brightness int    `json:"brightness"`
-}
-
 func New(cfg *config.Configuration) (*Bridge, error) {
 	if domestiaClient, err := domestia.NewClient(cfg.IpAddress, cfg.Lights); err != nil {
 		return nil, err
@@ -69,7 +64,7 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 				if !light.Dimmable {
 					b.domestia.SetMaxBrightness(relay)
 				} else if cmd.Brightness != 0 {
-					b.domestia.SetBrightness(relay, brightnessToDomestia(cmd.Brightness))
+					b.domestia.SetBrightness(relay, cmd.BrightnessForDomestia())
 				}
 			} else {
 				log.Printf("Turning off %v", light.Name)
@@ -135,12 +130,4 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 	}
 
 	return nil
-}
-
-func brightnessFromDomestia(brightness uint8) int {
-	return int(float32(brightness) * (255.0 / 63.0))
-}
-
-func brightnessToDomestia(brightness int) uint8 {
-	return uint8(float32(brightness) * (63.0 / 255.0))
 }
