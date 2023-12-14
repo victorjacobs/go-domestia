@@ -15,7 +15,7 @@ type Bridge struct {
 	cfg      *config.Configuration
 	domestia *domestia.Client
 	// Map to store current brightnesses of lights, used to publish only on changes to state
-	relayToBrightness map[int]int
+	relayToBrightness map[uint8]uint8
 }
 
 type lightCommand struct {
@@ -30,7 +30,7 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 		return &Bridge{
 			cfg:               cfg,
 			domestia:          domestiaClient,
-			relayToBrightness: make(map[int]int),
+			relayToBrightness: make(map[uint8]uint8),
 		}, nil
 	}
 }
@@ -67,9 +67,9 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 				b.domestia.TurnOn(relay)
 
 				if !light.Dimmable {
-					b.domestia.SetBrightness(relay, 255)
+					b.domestia.SetMaxBrightness(relay)
 				} else if cmd.Brightness != 0 {
-					b.domestia.SetBrightness(relay, cmd.Brightness)
+					b.domestia.SetBrightness(relay, brightnessToDomestia(cmd.Brightness))
 				}
 			} else {
 				log.Printf("Turning off %v", light.Name)
@@ -103,18 +103,20 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 			shouldPublishUpdate = light.Brightness != brightness
 		}
 
-		if configuration.AlwaysOn && light.Brightness != 255 {
+		if configuration.AlwaysOn && !light.IsMaxBrightness() {
 			// If the light is always-on, and the brightness is not 100%, set it to 100%
 			log.Printf("Turning always-on light %v back on", light.Configuration.Name)
+
 			b.domestia.TurnOn(configuration.Relay)
-			b.domestia.SetBrightness(configuration.Relay, 255)
+			b.domestia.SetMaxBrightness(configuration.Relay)
 
 			shouldPublishUpdate = false
-		} else if !configuration.Dimmable && light.Brightness != 0 && light.Brightness != 255 {
+		} else if !configuration.Dimmable && !light.IsMinBrightness() && !light.IsMaxBrightness() {
 			// If the light is not dimmable and on it should always be set to 100%
 			log.Printf("Non-dimmable light %v at brightness %v, resetting", configuration.Name, light.Brightness)
 
-			b.domestia.SetBrightness(configuration.Relay, 255)
+			b.domestia.SetMaxBrightness(configuration.Relay)
+
 			shouldPublishUpdate = false
 		} else {
 			b.relayToBrightness[configuration.Relay] = light.Brightness
@@ -122,8 +124,9 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 
 		if shouldPublishUpdate {
 			log.Printf("%v changed state", configuration.Name)
+
 			stateTopic := configuration.StateTopic()
-			if stateJson, err := light.StateJson(); err != nil {
+			if stateJson, err := marshalLightToJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
 			} else if t := mqttClient.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
 				return fmt.Errorf("[%v] Publish error: %v", stateTopic, t.Error())
@@ -132,4 +135,12 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 	}
 
 	return nil
+}
+
+func brightnessFromDomestia(brightness uint8) int {
+	return int(float32(brightness) * (255.0 / 63.0))
+}
+
+func brightnessToDomestia(brightness int) uint8 {
+	return uint8(float32(brightness) * (63.0 / 255.0))
 }

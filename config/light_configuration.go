@@ -8,7 +8,7 @@ import (
 
 type LightConfiguration struct {
 	Name                  string `json:"name"`
-	Relay                 int    `json:"relay"`
+	Relay                 uint8  `json:"relay"`
 	Dimmable              bool   `json:"dimmable"`
 	AlwaysOn              bool   `json:"always_on"`
 	HiddenInHomeAssistant bool   `json:"hidden_in_home_assistant"`

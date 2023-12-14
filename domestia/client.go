@@ -10,13 +10,18 @@ import (
 	"github.com/victorjacobs/go-domestia/config"
 )
 
-const port = 52001
+type relayState int
+
+const (
+	relayStateOff relayState = iota
+	relayStateOn
+)
 
 type Client struct {
 	mutex              *sync.Mutex
 	ipAddress          string
 	conn               net.Conn
-	lightConfiguration map[int]config.LightConfiguration
+	lightConfiguration map[uint8]config.LightConfiguration
 }
 
 func NewClient(ipAddress string, lights []config.LightConfiguration) (*Client, error) {
@@ -24,7 +29,7 @@ func NewClient(ipAddress string, lights []config.LightConfiguration) (*Client, e
 		return nil, errors.New("NewDomestiaClient requires ipAddress")
 	}
 
-	lightConfiguration := make(map[int]config.LightConfiguration)
+	lightConfiguration := make(map[uint8]config.LightConfiguration)
 
 	for _, light := range lights {
 		lightConfiguration[light.Relay] = light
@@ -38,7 +43,9 @@ func NewClient(ipAddress string, lights []config.LightConfiguration) (*Client, e
 }
 
 func (d *Client) connect() error {
-	if conn, err := net.Dial("tcp", d.connectUrl()); err != nil {
+	connectURL := fmt.Sprintf("%v:%v", d.ipAddress, 52001)
+
+	if conn, err := net.Dial("tcp", connectURL); err != nil {
 		return err
 	} else if err = conn.SetDeadline(time.Now().Add(time.Second)); err != nil {
 		return err
@@ -49,10 +56,7 @@ func (d *Client) connect() error {
 	}
 }
 
-func (d *Client) connectUrl() string {
-	return fmt.Sprintf("%v:%v", d.ipAddress, port)
-}
-
+// GetState queries the controller and returns the current state of all lights.
 func (d *Client) GetState() ([]Light, error) {
 	stateCommand := []byte{
 		0xff, 0x00, 0x00, 0x01, 0x3c, 0x3c, 0x20,
@@ -71,7 +75,7 @@ func (d *Client) GetState() ([]Light, error) {
 	}
 
 	for i, byte := range response[3:] {
-		if cfg, ok := d.lightConfiguration[i+1]; ok {
+		if cfg, ok := d.lightConfiguration[uint8(i+1)]; ok {
 			lights = append(lights, NewLight(cfg, byte))
 		}
 	}
@@ -79,15 +83,25 @@ func (d *Client) GetState() ([]Light, error) {
 	return lights, nil
 }
 
-func (d *Client) TurnOff(relay int) error {
-	return d.toggleRelay(0x0f, relay)
+// TurnOff turns off relay with given index.
+func (d *Client) TurnOff(relay uint8) error {
+	return d.setRelayState(relay, relayStateOff)
 }
 
-func (d *Client) TurnOn(relay int) error {
-	return d.toggleRelay(0x0e, relay)
+// TurnOn turns on relay with given index.
+func (d *Client) TurnOn(relay uint8) error {
+	return d.setRelayState(relay, relayStateOn)
 }
 
-func (d *Client) toggleRelay(cmd byte, relay int) error {
+func (d *Client) setRelayState(relay uint8, state relayState) error {
+	var cmd byte
+	switch state {
+	case relayStateOn:
+		cmd = 0x0e
+	case relayStateOff:
+		cmd = 0x0f
+	}
+
 	command := []byte{
 		0xff, 0x00, 0x00, 0x02, cmd, byte(relay), cmd + byte(relay),
 	}
@@ -101,11 +115,10 @@ func (d *Client) toggleRelay(cmd byte, relay int) error {
 	return nil
 }
 
-func (d *Client) SetBrightness(relay int, brightness int) error {
-	brightnessForController := int(float64(brightness) * (64.0 / 255.0))
-
+// SetBrightness sets brightness of relay to given brightness. Brightness is an uint8, so values between 0 and 63.
+func (d *Client) SetBrightness(relay uint8, brightness uint8) error {
 	command := []byte{
-		0xff, 0x00, 0x00, 0x03, 0x10, byte(relay), byte(brightnessForController), byte(0x10 + relay + brightnessForController),
+		0xff, 0x00, 0x00, 0x03, 0x10, relay, brightness, 0x10 + relay + brightness,
 	}
 
 	if response, err := d.send(command); err != nil {
@@ -115,6 +128,11 @@ func (d *Client) SetBrightness(relay int, brightness int) error {
 	}
 
 	return nil
+}
+
+// SetMaxBrightness sets given relay index to maximum brightness.
+func (d *Client) SetMaxBrightness(relay uint8) error {
+	return d.SetBrightness(relay, 63)
 }
 
 func (d *Client) send(command []byte) ([]byte, error) {
