@@ -14,24 +14,43 @@ import (
 type Bridge struct {
 	cfg      *config.Configuration
 	domestia *domestia.Client
+	mqtt     mqtt.Client
 	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness map[uint8]uint8
 }
 
 func New(cfg *config.Configuration) (*Bridge, error) {
-	if domestiaClient, err := domestia.NewClient(cfg.IpAddress, cfg.Lights); err != nil {
+	domestiaClient, err := domestia.NewClient(cfg.IpAddress, cfg.Lights)
+	if err != nil {
 		return nil, err
-	} else {
-		return &Bridge{
-			cfg:               cfg,
-			domestia:          domestiaClient,
-			relayToBrightness: make(map[uint8]uint8),
-		}, nil
 	}
+
+	bridge := &Bridge{
+		cfg:               cfg,
+		domestia:          domestiaClient,
+		relayToBrightness: make(map[uint8]uint8),
+	}
+
+	opts := cfg.Mqtt.ClientOptions()
+	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
+	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		if err := bridge.setupLights(client); err != nil {
+			log.Panicf("Failed to register with MQTT: %v", err)
+		}
+	})
+
+	mqttClient := mqtt.NewClient(opts)
+	if t := mqttClient.Connect(); t.Wait() && t.Error() != nil {
+		return nil, fmt.Errorf("MQTT connection error: %w", t.Error())
+	}
+
+	bridge.mqtt = mqttClient
+
+	return bridge, nil
 }
 
-// Setup function: publishes Home Assistant configuration and subscribes to state updates
-func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
+// setupLights publishes Home Assistant configuration and subscribes to state updates
+func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 	// Register lights with Homeassistant and subscribe to command topics
 	for _, l := range b.cfg.Lights {
 		// Bind current l to light
@@ -81,7 +100,7 @@ func (b *Bridge) SetupLights(mqttClient mqtt.Client) error {
 // Fetches current state of the controller and publishes updates to mqtt.
 // Also makes sure always-on lights are in fact always on. Also makes sure
 // that non-dimmable lights are not dimmed.
-func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
+func (b *Bridge) PublishLightState() error {
 	lights, err := b.domestia.GetState()
 
 	if err != nil {
@@ -123,7 +142,7 @@ func (b *Bridge) PublishLightState(mqttClient mqtt.Client) error {
 			stateTopic := configuration.StateTopic()
 			if stateJson, err := marshalLightToJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
-			} else if t := mqttClient.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
+			} else if t := b.mqtt.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
 				return fmt.Errorf("[%v] Publish error: %v", stateTopic, t.Error())
 			}
 		}

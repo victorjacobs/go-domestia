@@ -5,7 +5,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/victorjacobs/go-domestia/bridge"
 	"github.com/victorjacobs/go-domestia/config"
 )
@@ -25,21 +24,8 @@ func main() {
 		log.Panicf("Failed to set up bridge: %v", err)
 	}
 
-	opts := cfg.Mqtt.ClientOptions()
-	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
-	opts.SetOnConnectHandler(func(client mqtt.Client) {
-		if err := b.SetupLights(client); err != nil {
-			log.Panicf("Failed to register with MQTT: %v", err)
-		}
-	})
-
-	mqttClient := mqtt.NewClient(opts)
-	if t := mqttClient.Connect(); t.Wait() && t.Error() != nil {
-		log.Panicf("MQTT connection error: %v", t.Error())
-	}
-
 	go loopSafely(func() {
-		if err := b.PublishLightState(mqttClient); err != nil {
+		if err := b.PublishLightState(); err != nil {
 			panic(err)
 		}
 
