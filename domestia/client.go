@@ -1,6 +1,7 @@
 package domestia
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -58,25 +59,20 @@ func (d *Client) connect() error {
 
 // GetState queries the controller and returns the current state of all lights.
 func (d *Client) GetState() ([]Light, error) {
-	stateCommand := []byte{
-		0xff, 0x00, 0x00, 0x01, 0x3c, 0x3c, 0x20,
-	}
-
-	var response []byte
-	var err error
-	if response, err = d.send(stateCommand); err != nil {
+	response, err := d.send([]byte{0x3c})
+	if err != nil {
 		return nil, err
 	}
 
-	lights := make([]Light, 0)
+	var lights []Light
 
 	if response[0] != 0xff {
 		return lights, nil
 	}
 
-	for i, byte := range response[3:] {
+	for i, relayByte := range response[3:] {
 		if cfg, ok := d.lightConfiguration[uint8(i+1)]; ok {
-			lights = append(lights, NewLight(cfg, byte))
+			lights = append(lights, NewLight(cfg, relayByte))
 		}
 	}
 
@@ -94,17 +90,15 @@ func (d *Client) TurnOn(relay uint8) error {
 }
 
 func (d *Client) setRelayState(relay uint8, state relayState) error {
-	var cmd byte
+	var toggleCommand byte
 	switch state {
 	case relayStateOn:
-		cmd = 0x0e
+		toggleCommand = 0x0e
 	case relayStateOff:
-		cmd = 0x0f
+		toggleCommand = 0x0f
 	}
 
-	command := []byte{
-		0xff, 0x00, 0x00, 0x02, cmd, byte(relay), cmd + byte(relay),
-	}
+	command := []byte{toggleCommand, relay}
 
 	if response, err := d.send(command); err != nil {
 		return err
@@ -118,7 +112,7 @@ func (d *Client) setRelayState(relay uint8, state relayState) error {
 // SetBrightness sets brightness of relay to given brightness. Brightness is an uint8, so values between 0 and 63.
 func (d *Client) SetBrightness(relay uint8, brightness uint8) error {
 	command := []byte{
-		0xff, 0x00, 0x00, 0x03, 0x10, relay, brightness, 0x10 + relay + brightness,
+		0x10, relay, brightness,
 	}
 
 	if response, err := d.send(command); err != nil {
@@ -144,9 +138,11 @@ func (d *Client) send(command []byte) ([]byte, error) {
 	}
 	defer d.conn.Close()
 
+	packed := packCommand(command)
+
 	response := make([]byte, 256)
 
-	if _, err := d.conn.Write(command); err != nil {
+	if _, err := d.conn.Write(packed); err != nil {
 		return nil, err
 	} else if n, err := d.conn.Read(response); err != nil {
 		return nil, err
@@ -155,4 +151,22 @@ func (d *Client) send(command []byte) ([]byte, error) {
 	}
 
 	return response, nil
+}
+
+// packCommand packs a command into a controller message
+func packCommand(cmd []byte) []byte {
+	var buf bytes.Buffer
+
+	buf.Write([]byte{0xff, 0x00, 0x00})
+	buf.WriteByte(byte(len(cmd)))
+	buf.Write(cmd)
+
+	var checksum uint8
+	for _, c := range cmd {
+		checksum += c
+	}
+
+	buf.WriteByte(checksum)
+
+	return buf.Bytes()
 }
