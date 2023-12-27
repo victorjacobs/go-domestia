@@ -3,6 +3,7 @@ package bridge
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -14,7 +15,8 @@ import (
 type Bridge struct {
 	cfg      *config.Configuration
 	domestia *domestia.Client
-	mqtt     mqtt.Client
+	// Channel to trigger an pull and publish state from controller
+	updateChannel chan bool
 	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness map[uint8]uint8
 }
@@ -25,16 +27,42 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 		return nil, err
 	}
 
-	bridge := &Bridge{
+	return &Bridge{
 		cfg:               cfg,
 		domestia:          domestiaClient,
 		relayToBrightness: make(map[uint8]uint8),
+		updateChannel:     make(chan bool),
+	}, nil
+}
+
+// Run runs the bridge, blocking. If this function returns an error it can be restarted.
+// If it returns nil, it was cleanly shut down.
+func (b *Bridge) Run() error {
+	mqttClient, err := b.connectMQTT()
+	if err != nil {
+		return err
 	}
 
-	opts := cfg.Mqtt.ClientOptions()
+	ticker := time.NewTicker(time.Duration(b.cfg.RefreshFrequency) * time.Millisecond)
+
+	for {
+		select {
+		case <-ticker.C:
+		case <-b.updateChannel:
+		}
+
+		if err := b.publishLightState(mqttClient); err != nil {
+			return err
+		}
+	}
+}
+
+// connectMQTT creates and connects MQTT client
+func (b *Bridge) connectMQTT() (mqtt.Client, error) {
+	opts := b.cfg.Mqtt.ClientOptions()
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
-		if err := bridge.setupLights(client); err != nil {
+		if err := b.setupLights(client); err != nil {
 			log.Panicf("Failed to register with MQTT: %v", err)
 		}
 	})
@@ -44,16 +72,12 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 		return nil, fmt.Errorf("MQTT connection error: %w", t.Error())
 	}
 
-	bridge.mqtt = mqttClient
-
-	return bridge, nil
+	return mqttClient, nil
 }
 
 // setupLights publishes Home Assistant configuration and subscribes to state updates
 func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
-	// Register lights with Homeassistant and subscribe to command topics
 	for _, l := range b.cfg.Lights {
-		// Bind current l to light
 		light := l
 
 		// Publish configuration for MQTT autodiscovery
@@ -89,6 +113,9 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 				log.Printf("Turning off %v", light.Name)
 				b.domestia.TurnOff(relay)
 			}
+
+			// Trigger pulling and publishing controller state
+			b.updateChannel <- true
 		}); t.Wait() && t.Error() != nil {
 			return fmt.Errorf("MQTT receive error: %v", t.Error())
 		}
@@ -100,7 +127,7 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 // Fetches current state of the controller and publishes updates to mqtt.
 // Also makes sure always-on lights are in fact always on. Also makes sure
 // that non-dimmable lights are not dimmed.
-func (b *Bridge) PublishLightState() error {
+func (b *Bridge) publishLightState(mqttClient mqtt.Client) error {
 	lights, err := b.domestia.GetState()
 
 	if err != nil {
@@ -142,7 +169,7 @@ func (b *Bridge) PublishLightState() error {
 			stateTopic := configuration.StateTopic()
 			if stateJson, err := marshalLightToJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
-			} else if t := b.mqtt.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
+			} else if t := mqttClient.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
 				return fmt.Errorf("[%v] Publish error: %v", stateTopic, t.Error())
 			}
 		}

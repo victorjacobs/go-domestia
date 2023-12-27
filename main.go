@@ -25,11 +25,9 @@ func main() {
 	}
 
 	go loopSafely(func() {
-		if err := b.PublishLightState(); err != nil {
-			panic(err)
+		if err := b.Run(); err != nil {
+			log.Errorf("%v", err)
 		}
-
-		time.Sleep(time.Duration(cfg.RefreshFrequency * 1_000_000))
 	})
 
 	select {}
