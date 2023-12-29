@@ -43,6 +43,10 @@ func (b *Bridge) Run() error {
 		return err
 	}
 
+	defer func() {
+		mqttClient.Disconnect(100)
+	}()
+
 	ticker := time.NewTicker(time.Duration(b.cfg.RefreshFrequency) * time.Millisecond)
 
 	for {
