@@ -14,35 +14,24 @@ import (
 func main() {
 	cfg, err := config.LoadConfiguration("domestia.json")
 	if err != nil {
-		log.Panicf("Error loading configuration: %v", err)
+		log.Fatalf("Error loading configuration: %v", err)
 	}
 
 	log.Printf("Connecting to %v, managing %v relays", cfg.IpAddress, len(cfg.Lights))
 
 	b, err := bridge.New(cfg)
 	if err != nil {
-		log.Panicf("Failed to set up bridge: %v", err)
+		log.Fatalf("Failed to set up bridge: %v", err)
 	}
 
-	go loopSafely(func() {
-		if err := b.Run(); err != nil {
-			log.Errorf("%v", err)
-		}
-	})
-
-	select {}
-}
-
-func loopSafely(f func()) {
-	defer func() {
-		if v := recover(); v != nil {
-			log.Printf("Panic: %v, restarting", v)
-			time.Sleep(time.Second)
-			go loopSafely(f)
-		}
-	}()
-
 	for {
-		f()
+		if err := b.Run(); err != nil {
+			log.Errorf("Bridge returned: %v, restarting", err)
+		} else {
+			log.Print("Shutting down")
+			break
+		}
+
+		time.Sleep(time.Second)
 	}
 }

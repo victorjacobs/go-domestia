@@ -67,7 +67,7 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		if err := b.setupLights(client); err != nil {
-			log.Panicf("Failed to register with MQTT: %v", err)
+			log.Fatalf("Failed to register with MQTT: %v", err)
 		}
 	})
 
@@ -101,7 +101,8 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 			relay := light.Relay
 			cmd := &lightCommand{}
 			if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
-				log.Panicf("MQTT deserialization failed: %v", err)
+				log.Errorf("MQTT deserialization failed: %v", err)
+				return
 			}
 
 			if cmd.State == "ON" {
