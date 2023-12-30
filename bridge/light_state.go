@@ -4,17 +4,12 @@ import (
 	"encoding/json"
 
 	"github.com/victorjacobs/go-domestia/domestia"
+	"github.com/victorjacobs/go-domestia/homeassistant"
 )
 
-// lightState represents the light state as published over MQTT
-type lightState struct {
-	State      string `json:"state"`
-	Brightness int    `json:"brightness"`
-}
-
-func marshalLightToJSON(l *domestia.Light) (string, error) {
-	state := &lightState{
-		Brightness: brightnessFromDomestia(l.Brightness),
+func homeAssistantStateJSON(l *domestia.Light) (string, error) {
+	state := &homeassistant.LightState{
+		Brightness: homeAssistantBrightness(l),
 	}
 
 	if l.Brightness != 0 {
@@ -30,7 +25,12 @@ func marshalLightToJSON(l *domestia.Light) (string, error) {
 	}
 }
 
-// brightnessFromDomestia converts the brightness in domestia.Light to brightness as published over MQTT
-func brightnessFromDomestia(brightness uint8) int {
-	return int(float32(brightness) * (255.0 / 63.0))
+// homeAssistantBrightness converts the brightness in domestia.Light to brightness as published over MQTT
+func homeAssistantBrightness(l *domestia.Light) int {
+	return int(float32(l.Brightness) * (255.0 / 63.0))
+}
+
+// domestiaBrightness returns brightness converted to Domestia controller
+func domestiaBrightness(l *homeassistant.LightState) uint8 {
+	return uint8(float32(l.Brightness) * (63.0 / 255.0))
 }

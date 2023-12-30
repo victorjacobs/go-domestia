@@ -10,6 +10,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/victorjacobs/go-domestia/config"
 	"github.com/victorjacobs/go-domestia/domestia"
+	"github.com/victorjacobs/go-domestia/homeassistant"
 )
 
 type Bridge struct {
@@ -112,7 +113,7 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 func (b *Bridge) lightSubscripionCallback(light *config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
 	return func(mqttClient mqtt.Client, msg mqtt.Message) {
 		relay := light.Relay
-		cmd := &lightCommand{}
+		cmd := &homeassistant.LightState{}
 		if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
 			log.Errorf("MQTT deserialization failed: %v", err)
 			return
@@ -125,7 +126,7 @@ func (b *Bridge) lightSubscripionCallback(light *config.Light) func(mqttClient m
 			if !light.Dimmable {
 				b.domestia.SetMaxBrightness(relay)
 			} else if cmd.Brightness != 0 {
-				b.domestia.SetBrightness(relay, cmd.BrightnessForDomestia())
+				b.domestia.SetBrightness(relay, domestiaBrightness(cmd))
 			}
 		} else {
 			log.Printf("Turning off %v", light.Name)
@@ -194,7 +195,7 @@ func (b *Bridge) publishLightState() error {
 			log.Printf("%v changed state", configuration.Name)
 
 			stateTopic := configuration.StateTopic()
-			if stateJson, err := marshalLightToJSON(light); err != nil {
+			if stateJson, err := homeAssistantStateJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
 			} else if t := b.mqtt.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
 				return fmt.Errorf("[%v] Publish error: %v", stateTopic, t.Error())
