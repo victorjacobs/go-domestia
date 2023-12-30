@@ -5,12 +5,12 @@ import (
 )
 
 type Light struct {
-	Configuration config.LightConfiguration
+	Configuration config.Light
 	Brightness    uint8
 }
 
 // NewLight creates a new Light struct from given configuration and brightness.
-func NewLight(cfg config.LightConfiguration, brightness uint8) Light {
+func NewLight(cfg config.Light, brightness uint8) Light {
 	// If brightness is exactly 1, the relay is not dimmable and on.
 	if brightness == 1 {
 		brightness = 63

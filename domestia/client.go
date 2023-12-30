@@ -22,15 +22,15 @@ type Client struct {
 	mutex              *sync.Mutex
 	ipAddress          string
 	conn               net.Conn
-	lightConfiguration map[uint8]config.LightConfiguration
+	lightConfiguration map[uint8]config.Light
 }
 
-func NewClient(ipAddress string, lights []config.LightConfiguration) (*Client, error) {
+func NewClient(ipAddress string, lights []config.Light) (*Client, error) {
 	if ipAddress == "" {
 		return nil, errors.New("NewDomestiaClient requires ipAddress")
 	}
 
-	lightConfiguration := make(map[uint8]config.LightConfiguration)
+	lightConfiguration := make(map[uint8]config.Light)
 
 	for _, light := range lights {
 		lightConfiguration[light.Relay] = light

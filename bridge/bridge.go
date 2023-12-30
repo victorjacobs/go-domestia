@@ -13,8 +13,10 @@ import (
 )
 
 type Bridge struct {
-	cfg      *config.Configuration
-	domestia *domestia.Client
+	configuration *config.Configuration
+	domestia      *domestia.Client
+	mqtt          mqtt.Client
+
 	// Channel to trigger an pull and publish state from controller
 	updateChannel chan bool
 	// Map to store current brightnesses of lights, used to publish only on changes to state
@@ -28,7 +30,7 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 	}
 
 	return &Bridge{
-		cfg:               cfg,
+		configuration:     cfg,
 		domestia:          domestiaClient,
 		relayToBrightness: make(map[uint8]uint8),
 		updateChannel:     make(chan bool),
@@ -47,15 +49,18 @@ func (b *Bridge) Run() error {
 		mqttClient.Disconnect(100)
 	}()
 
-	ticker := time.NewTicker(time.Duration(b.cfg.RefreshFrequency) * time.Millisecond)
+	b.mqtt = mqttClient
 
+	ticker := time.NewTicker(time.Duration(b.configuration.RefreshFrequency) * time.Millisecond)
+
+	// Loop to poll controller and publish state updates
 	for {
 		select {
 		case <-ticker.C:
 		case <-b.updateChannel:
 		}
 
-		if err := b.publishLightState(mqttClient); err != nil {
+		if err := b.publishLightState(); err != nil {
 			return err
 		}
 	}
@@ -63,7 +68,7 @@ func (b *Bridge) Run() error {
 
 // connectMQTT creates and connects MQTT client
 func (b *Bridge) connectMQTT() (mqtt.Client, error) {
-	opts := b.cfg.Mqtt.ClientOptions()
+	opts := b.configuration.Mqtt.ClientOptions()
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		if err := b.setupLights(client); err != nil {
@@ -81,50 +86,21 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 
 // setupLights publishes Home Assistant configuration and subscribes to state updates
 func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
-	for _, l := range b.cfg.Lights {
+	for _, l := range b.configuration.Lights {
 		light := l
 
-		// Lights that are always don't subscribe to command topics
+		// Lights that are always are not registered with Home Assistant
 		if light.AlwaysOn {
 			continue
 		}
 
-		// Publish configuration for MQTT autodiscovery
-		configTopic := light.ConfigTopic()
-		if configJson, err := light.ConfigJson(); err != nil {
-			return fmt.Errorf("error marshalling light configuration: %v", err)
-		} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
-			return fmt.Errorf("MQTT publish failed: %v", t.Error())
+		// Register light with Home Assistant
+		if err := b.registerLight(mqttClient, light); err != nil {
+			return err
 		}
 
-		log.Printf("Registered %v with Homeassistant", light.Name)
-
-		// Subscribe to all light command topics
-		if t := mqttClient.Subscribe(light.CommandTopic(), 0, func(mqttClient mqtt.Client, msg mqtt.Message) {
-			relay := light.Relay
-			cmd := &lightCommand{}
-			if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
-				log.Errorf("MQTT deserialization failed: %v", err)
-				return
-			}
-
-			if cmd.State == "ON" {
-				log.Printf("Turning on %v", light.Name)
-				b.domestia.TurnOn(relay)
-
-				if !light.Dimmable {
-					b.domestia.SetMaxBrightness(relay)
-				} else if cmd.Brightness != 0 {
-					b.domestia.SetBrightness(relay, cmd.BrightnessForDomestia())
-				}
-			} else {
-				log.Printf("Turning off %v", light.Name)
-				b.domestia.TurnOff(relay)
-			}
-
-			// Trigger pulling and publishing controller state
-			b.updateChannel <- true
-		}); t.Wait() && t.Error() != nil {
+		// Subscribe to command topic
+		if t := mqttClient.Subscribe(light.CommandTopic(), 0, b.lightSubscripionCallback(light)); t.Wait() && t.Error() != nil {
 			return fmt.Errorf("MQTT receive error: %v", t.Error())
 		}
 	}
@@ -132,10 +108,53 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 	return nil
 }
 
+// lightSubscripionCallback creates callback to handle messages on light command topic
+func (b *Bridge) lightSubscripionCallback(light config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
+	return func(mqttClient mqtt.Client, msg mqtt.Message) {
+		relay := light.Relay
+		cmd := &lightCommand{}
+		if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
+			log.Errorf("MQTT deserialization failed: %v", err)
+			return
+		}
+
+		if cmd.State == "ON" {
+			log.Printf("Turning on %v", light.Name)
+			b.domestia.TurnOn(relay)
+
+			if !light.Dimmable {
+				b.domestia.SetMaxBrightness(relay)
+			} else if cmd.Brightness != 0 {
+				b.domestia.SetBrightness(relay, cmd.BrightnessForDomestia())
+			}
+		} else {
+			log.Printf("Turning off %v", light.Name)
+			b.domestia.TurnOff(relay)
+		}
+
+		// Trigger pulling and publishing controller state
+		b.updateChannel <- true
+	}
+}
+
+// registerLight registers a light with Home Assistant
+func (b *Bridge) registerLight(mqttClient mqtt.Client, l config.Light) error {
+	configTopic := l.ConfigTopic()
+	if configJson, err := l.ConfigJson(); err != nil {
+		return fmt.Errorf("error marshalling light configuration: %v", err)
+	} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
+		return fmt.Errorf("MQTT publish failed: %v", t.Error())
+	}
+
+	log.Printf("Registered %v with Home Assistant", l.Name)
+
+	return nil
+}
+
 // Fetches current state of the controller and publishes updates to mqtt.
 // Also makes sure always-on lights are in fact always on. Also makes sure
 // that non-dimmable lights are not dimmed.
-func (b *Bridge) publishLightState(mqttClient mqtt.Client) error {
+func (b *Bridge) publishLightState() error {
 	lights, err := b.domestia.GetState()
 
 	if err != nil {
@@ -177,7 +196,7 @@ func (b *Bridge) publishLightState(mqttClient mqtt.Client) error {
 			stateTopic := configuration.StateTopic()
 			if stateJson, err := marshalLightToJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
-			} else if t := mqttClient.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
+			} else if t := b.mqtt.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
 				return fmt.Errorf("[%v] Publish error: %v", stateTopic, t.Error())
 			}
 		}

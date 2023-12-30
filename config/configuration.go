@@ -14,13 +14,13 @@ import (
 const topicPrefix = "domestia"
 
 type Configuration struct {
-	Lights           []LightConfiguration `json:"lights"`
-	Mqtt             Mqtt                 `json:"mqtt"`
-	IpAddress        string               `json:"ip_address"`
-	RefreshFrequency int                  `json:"refresh_frequency"`
+	Lights           []Light `json:"lights"`
+	Mqtt             MQTT    `json:"mqtt"`
+	IpAddress        string  `json:"ip_address"`
+	RefreshFrequency int     `json:"refresh_frequency"`
 }
 
-type Mqtt struct {
+type MQTT struct {
 	IpAddress string `json:"ip_address"`
 	Username  string `json:"username"`
 	Password  string `json:"password"`
@@ -50,7 +50,7 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 	return configuration, nil
 }
 
-func (m *Mqtt) ClientOptions() *mqtt.ClientOptions {
+func (m *MQTT) ClientOptions() *mqtt.ClientOptions {
 	return mqtt.NewClientOptions().
 		AddBroker(fmt.Sprintf("tcp://%v:1883", m.IpAddress)).
 		SetUsername(m.Username).
