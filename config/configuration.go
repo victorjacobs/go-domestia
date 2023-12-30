@@ -14,10 +14,10 @@ import (
 const topicPrefix = "domestia"
 
 type Configuration struct {
-	Lights           []Light `json:"lights"`
-	Mqtt             MQTT    `json:"mqtt"`
-	IpAddress        string  `json:"ip_address"`
-	RefreshFrequency int     `json:"refresh_frequency"`
+	Lights           []*Light `json:"lights"`
+	MQTT             *MQTT    `json:"mqtt"`
+	IpAddress        string   `json:"ip_address"`
+	RefreshFrequency int      `json:"refresh_frequency"`
 }
 
 type MQTT struct {

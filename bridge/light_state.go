@@ -12,7 +12,7 @@ type lightState struct {
 	Brightness int    `json:"brightness"`
 }
 
-func marshalLightToJSON(l domestia.Light) (string, error) {
+func marshalLightToJSON(l *domestia.Light) (string, error) {
 	state := &lightState{
 		Brightness: brightnessFromDomestia(l.Brightness),
 	}

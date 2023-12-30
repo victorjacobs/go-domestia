@@ -22,15 +22,15 @@ type Client struct {
 	mutex              *sync.Mutex
 	ipAddress          string
 	conn               net.Conn
-	lightConfiguration map[uint8]config.Light
+	lightConfiguration map[uint8]*config.Light
 }
 
-func NewClient(ipAddress string, lights []config.Light) (*Client, error) {
+func NewClient(ipAddress string, lights []*config.Light) (*Client, error) {
 	if ipAddress == "" {
 		return nil, errors.New("NewDomestiaClient requires ipAddress")
 	}
 
-	lightConfiguration := make(map[uint8]config.Light)
+	lightConfiguration := make(map[uint8]*config.Light)
 
 	for _, light := range lights {
 		lightConfiguration[light.Relay] = light
@@ -58,13 +58,13 @@ func (d *Client) connect() error {
 }
 
 // GetState queries the controller and returns the current state of all lights.
-func (d *Client) GetState() ([]Light, error) {
+func (d *Client) GetState() ([]*Light, error) {
 	response, err := d.send([]byte{0x3c})
 	if err != nil {
 		return nil, err
 	}
 
-	var lights []Light
+	var lights []*Light
 
 	if response[0] != 0xff {
 		return lights, nil

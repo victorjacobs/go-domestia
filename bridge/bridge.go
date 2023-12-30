@@ -68,7 +68,7 @@ func (b *Bridge) Run() error {
 
 // connectMQTT creates and connects MQTT client
 func (b *Bridge) connectMQTT() (mqtt.Client, error) {
-	opts := b.configuration.Mqtt.ClientOptions()
+	opts := b.configuration.MQTT.ClientOptions()
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		if err := b.setupLights(client); err != nil {
@@ -109,7 +109,7 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 }
 
 // lightSubscripionCallback creates callback to handle messages on light command topic
-func (b *Bridge) lightSubscripionCallback(light config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
+func (b *Bridge) lightSubscripionCallback(light *config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
 	return func(mqttClient mqtt.Client, msg mqtt.Message) {
 		relay := light.Relay
 		cmd := &lightCommand{}
@@ -138,7 +138,7 @@ func (b *Bridge) lightSubscripionCallback(light config.Light) func(mqttClient mq
 }
 
 // registerLight registers a light with Home Assistant
-func (b *Bridge) registerLight(mqttClient mqtt.Client, l config.Light) error {
+func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 	configTopic := l.ConfigTopic()
 	if configJson, err := l.ConfigJson(); err != nil {
 		return fmt.Errorf("error marshalling light configuration: %v", err)
