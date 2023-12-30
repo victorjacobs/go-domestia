@@ -18,8 +18,6 @@ type Bridge struct {
 	domestia      *domestia.Client
 	mqtt          mqtt.Client
 
-	lightConfiguration map[uint8]*homeassistant.LightConfiguration
-
 	// Channel to trigger an pull and publish state from controller
 	updateChannel chan bool
 	// Map to store current brightnesses of lights, used to publish only on changes to state
@@ -32,17 +30,11 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 		return nil, err
 	}
 
-	lightConfiguration := make(map[uint8]*homeassistant.LightConfiguration)
-	for _, l := range cfg.Lights {
-		lightConfiguration[l.Relay] = homeassistant.NewLightConfiguration(l)
-	}
-
 	return &Bridge{
-		configuration:      cfg,
-		lightConfiguration: lightConfiguration,
-		domestia:           domestiaClient,
-		relayToBrightness:  make(map[uint8]uint8),
-		updateChannel:      make(chan bool),
+		configuration:     cfg,
+		domestia:          domestiaClient,
+		relayToBrightness: make(map[uint8]uint8),
+		updateChannel:     make(chan bool),
 	}, nil
 }
 
@@ -109,7 +101,7 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 		}
 
 		// Subscribe to command topic
-		if t := mqttClient.Subscribe(light.CommandTopic(), 0, b.lightSubscripionCallback(light)); t.Wait() && t.Error() != nil {
+		if t := mqttClient.Subscribe(light.HomeAssistant().CommandTopic, 0, b.lightSubscriptionCallback(light)); t.Wait() && t.Error() != nil {
 			return fmt.Errorf("MQTT receive error: %v", t.Error())
 		}
 	}
@@ -117,8 +109,8 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 	return nil
 }
 
-// lightSubscripionCallback creates callback to handle messages on light command topic
-func (b *Bridge) lightSubscripionCallback(light *config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
+// lightSubscriptionCallback creates callback to handle messages on light command topic
+func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
 	return func(mqttClient mqtt.Client, msg mqtt.Message) {
 		relay := light.Relay
 		cmd := &homeassistant.LightState{}
@@ -148,8 +140,8 @@ func (b *Bridge) lightSubscripionCallback(light *config.Light) func(mqttClient m
 
 // registerLight registers a light with Home Assistant
 func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
-	configTopic := l.ConfigTopic()
-	if configJson, err := l.ConfigJson(); err != nil {
+	configTopic := l.HomeAssistant().ConfigTopic
+	if configJson, err := l.HomeAssistantRegistrationJSON(); err != nil {
 		return fmt.Errorf("error marshalling light configuration: %v", err)
 	} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
 		return fmt.Errorf("MQTT publish failed: %v", t.Error())
@@ -164,13 +156,13 @@ func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 // Also makes sure always-on lights are in fact always on. Also makes sure
 // that non-dimmable lights are not dimmed.
 func (b *Bridge) publishLightState() error {
-	lights, err := b.domestia.GetState()
+	domestiaState, err := b.domestia.GetState()
 
 	if err != nil {
 		return err
 	}
 
-	for _, light := range lights {
+	for _, light := range domestiaState {
 		configuration := light.Configuration
 
 		var shouldPublishUpdate bool
@@ -202,7 +194,7 @@ func (b *Bridge) publishLightState() error {
 		if shouldPublishUpdate {
 			log.Printf("%v changed state", configuration.Name)
 
-			stateTopic := configuration.StateTopic()
+			stateTopic := configuration.HomeAssistant().StateTopic
 			if stateJson, err := homeAssistantStateJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
 			} else if t := b.mqtt.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {

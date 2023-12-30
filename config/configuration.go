@@ -11,8 +11,6 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-const topicPrefix = "domestia"
-
 type Configuration struct {
 	Lights           []*Light `json:"lights"`
 	MQTT             *MQTT    `json:"mqtt"`
