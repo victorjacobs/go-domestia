@@ -18,6 +18,8 @@ type Bridge struct {
 	domestia      *domestia.Client
 	mqtt          mqtt.Client
 
+	lightConfiguration map[uint8]*homeassistant.LightConfiguration
+
 	// Channel to trigger an pull and publish state from controller
 	updateChannel chan bool
 	// Map to store current brightnesses of lights, used to publish only on changes to state
@@ -30,11 +32,17 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 		return nil, err
 	}
 
+	lightConfiguration := make(map[uint8]*homeassistant.LightConfiguration)
+	for _, l := range cfg.Lights {
+		lightConfiguration[l.Relay] = homeassistant.NewLightConfiguration(l)
+	}
+
 	return &Bridge{
-		configuration:     cfg,
-		domestia:          domestiaClient,
-		relayToBrightness: make(map[uint8]uint8),
-		updateChannel:     make(chan bool),
+		configuration:      cfg,
+		lightConfiguration: lightConfiguration,
+		domestia:           domestiaClient,
+		relayToBrightness:  make(map[uint8]uint8),
+		updateChannel:      make(chan bool),
 	}, nil
 }
 
