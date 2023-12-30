@@ -7,11 +7,10 @@ import (
 )
 
 type LightConfiguration struct {
-	Name                  string `json:"name"`
-	Relay                 uint8  `json:"relay"`
-	Dimmable              bool   `json:"dimmable"`
-	AlwaysOn              bool   `json:"always_on"`
-	HiddenInHomeAssistant bool   `json:"hidden_in_home_assistant"`
+	Name     string `json:"name"`      // Light name
+	Relay    uint8  `json:"relay"`     // Relay number
+	Dimmable bool   `json:"dimmable"`  // Whether the light relay is dimmable
+	AlwaysOn bool   `json:"always_on"` // Whether the light relay should always be on, hides the relay in home assistant
 }
 
 func (l *LightConfiguration) EntityId() string {

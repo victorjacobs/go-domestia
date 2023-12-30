@@ -9,8 +9,7 @@
     {
       "name": "Wardrobe",
       "relay": 1,
-      "always_on": true,
-      "hidden_in_home_assistant": true
+      "always_on": true
     },
     {
       "name": "Garden",

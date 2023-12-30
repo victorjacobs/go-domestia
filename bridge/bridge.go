@@ -84,17 +84,20 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 	for _, l := range b.cfg.Lights {
 		light := l
 
-		// Publish configuration for MQTT autodiscovery
-		if !light.HiddenInHomeAssistant {
-			configTopic := light.ConfigTopic()
-			if configJson, err := light.ConfigJson(); err != nil {
-				return fmt.Errorf("error marshalling light configuration: %v", err)
-			} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
-				return fmt.Errorf("MQTT publish failed: %v", t.Error())
-			}
-
-			log.Printf("Registered %v with Homeassistant", light.Name)
+		// Lights that are always don't subscribe to command topics
+		if light.AlwaysOn {
+			continue
 		}
+
+		// Publish configuration for MQTT autodiscovery
+		configTopic := light.ConfigTopic()
+		if configJson, err := light.ConfigJson(); err != nil {
+			return fmt.Errorf("error marshalling light configuration: %v", err)
+		} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
+			return fmt.Errorf("MQTT publish failed: %v", t.Error())
+		}
+
+		log.Printf("Registered %v with Homeassistant", light.Name)
 
 		// Subscribe to all light command topics
 		if t := mqttClient.Subscribe(light.CommandTopic(), 0, func(mqttClient mqtt.Client, msg mqtt.Message) {
